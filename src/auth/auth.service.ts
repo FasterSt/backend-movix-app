@@ -1,20 +1,24 @@
 import { Injectable } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-auth.dto';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { SupabaseService } from 'src/supabase.service';
 
 @Injectable()
 export class AuthService {
-    private supabaseClient: SupabaseClient;
+    constructor(private supabaseService: SupabaseService) {}
 
-    constructor() {
-        this.supabaseClient = createClient(
-            process.env.SUPABASE_URL_PROJECT,
-            process.env.SUPABASE_KEY,
-        );
+    async signUpWithEmailAndPassword(dto: CreateUserDto) {
+        const res = await this.supabaseService.signUpWithEmail({
+            email: dto.email,
+            password: dto.password,
+        });
+        return {
+            user: res.user,
+            session: res.session,
+        };
     }
 
-    async signUpUser(dto: CreateUserDto) {
-        const res = await this.supabaseClient.auth.signUp({
+    async signInWithEmailAndPassword(dto: CreateUserDto) {
+        const res = await this.supabaseService.signInWithEmail({
             email: dto.email,
             password: dto.password,
         });
@@ -22,39 +26,18 @@ export class AuthService {
     }
 
     async signInWithGithub() {
-        return await this.supabaseClient.auth.signInWithOAuth({
-            provider: 'github',
-            options: {
-                redirectTo: `${process.env.FRONTEND_URL}/auth/callback`,
-            },
-        });
+        return await this.supabaseService.signInWithGithub();
     }
 
-    async exchangeCodeForToken(code: string) {
-        return await this.supabaseClient.auth.exchangeCodeForSession(code);
+    async handleAuthCallback(code: string) {
+        return await this.supabaseService.handleAuthCallback(code);
     }
 
-    // async createAuth(createAuthDto: CreateAuthDto) {
-    //   const { email, password } = createAuthDto;
-    //   const { data, error } = await this.SupabaseClient.auth.signUp({
-    //     email,
-    //     password,
-    //   });
-    //   if (error) {
-    //     throw new Error(error.message);
-    //   }
-    //   return data;
-    // }
+    async refreshToken(refresh_token: string) {
+        return await this.supabaseService.refreshToken(refresh_token);
+    }
 
-    // async updateAuth(updateAuthDto: UpdateAuthDto) {
-    //   const { email, password } = updateAuthDto;
-    //   const { data, error } = await this.SupabaseClient.auth.updateUser({
-    //     email,
-    //     password,
-    //   });
-    //   if (error) {
-    //     throw new Error(error.message);
-    //   }
-    //   return data;
-    // }
+    async getUser(jwt: string) {
+        return await this.supabaseService.getUser(jwt);
+    }
 }

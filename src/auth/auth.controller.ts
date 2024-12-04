@@ -1,8 +1,20 @@
-import { Controller, Post, Body, Res, Get, Query, Req } from '@nestjs/common';
+import {
+    Controller,
+    Post,
+    Body,
+    Res,
+    Get,
+    Query,
+    Req,
+    BadRequestException,
+    UnauthorizedException,
+    InternalServerErrorException,
+    UseGuards,
+} from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { CreateUserDto } from './dto/create-auth.dto';
-import { query, Request, Response } from 'express';
-import { AuthResponse } from '@supabase/supabase-js';
+import { Request, Response } from 'express';
+import { SupabaseGuard } from './guards/supabase.guard';
 
 @Controller('auth')
 export class AuthController {
@@ -13,46 +25,133 @@ export class AuthController {
         @Body() createAuthDto: CreateUserDto,
         @Res({ passthrough: true }) res: Response,
     ) {
-        const { data }: AuthResponse =
-            await this.authService.signUpUser(createAuthDto);
-        res.cookie('access_token', data.session.access_token, {
+        const { session } =
+            await this.authService.signUpWithEmailAndPassword(createAuthDto);
+
+        if (!session) {
+            throw new InternalServerErrorException('Error creating user');
+        }
+
+        res.cookie('access_token', session.access_token, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production' ? true : false,
-            sameSite: 'lax',
-            maxAge: 60 * 60 * 24 * 30,
-        }).send({ message: 'Successfully signed up!' });
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: session.expires_in * 1000,
+        }).cookie('refresh_token', session.refresh_token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: session.expires_in * 1000,
+        });
+    }
+
+    @Get('login')
+    async loginWithEmail(
+        @Body() createAuthDto: CreateUserDto,
+        @Res() res: Response,
+    ) {
+        const { session } =
+            await this.authService.signInWithEmailAndPassword(createAuthDto);
+
+        if (!session) {
+            throw new UnauthorizedException('Invalid email or password');
+        }
+
+        res.cookie('access_token', session.access_token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: session.expires_in * 1000,
+        }).cookie('refresh_token', session.refresh_token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: session.expires_in * 1000,
+        });
     }
 
     @Get('github')
-    async signIn(@Res({ passthrough: true }) res: Response) {
-        const {
-            data: { url },
-            error,
-        } = await this.authService.signInWithGithub();
-        if (error) {
-            return res.status(500).json({ error: error.message });
-        }
-
-        // return res.json({ data: url });
-        return res.redirect(302, url);
+    async githubLogin() {
+        console.log('GITHUB LOGIN');
+        return await this.authService.signInWithGithub();
     }
 
     @Get('github/callback')
     async githubCallback(
-        @Query() query: string,
-        @Res({ passthrough: true }) res: Response,
+        @Query('code') code: string,
+        @Res() res: Response,
         @Req() req: Request,
     ) {
-        // console.log(query);
-        // const { data, error } =
-        //     await this.authService.exchangeCodeForToken(code);
-        // if (error) {
-        //     return res.status(500).json({ error: error.message });
-        // }
-        // res.cookie('access_token', data.session.access_token, {
-        //     httpOnly: true,
-        //     secure: process.env.NODE_ENV === 'production',
-        //     sameSite: 'lax',
-        // });
+        console.log('CODE', code);
+
+        if (!code) {
+            throw new BadRequestException('No code provided');
+        }
+
+        // Delete this line and destructuring session of the token
+        const token = await this.authService.handleAuthCallback(code);
+
+        if (!token) {
+            throw new InternalServerErrorException('Error signing in user');
+        }
+
+        const { session } = token;
+
+        console.log(token);
+        console.log(req.originalUrl);
+
+        res.cookie('access_token', session.access_token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: session.expires_in * 1000,
+        });
+
+        res.cookie('refresh_token', session.refresh_token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: session.expires_in * 1000,
+        });
+
+        res.redirect(`${process.env.FRONTEND_URL}`);
+    }
+
+    @Post('refresh')
+    async refreshToken(
+        @Body()
+        {
+            refresh_token,
+        }: {
+            refresh_token: string;
+        },
+        @Res() res: Response,
+    ) {
+        const { session } = await this.authService.refreshToken(refresh_token);
+
+        if (!session) {
+            throw new UnauthorizedException('Invalid refresh token');
+        }
+
+        res.cookie('access_token', session.access_token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: session.expires_in * 1000,
+        }).cookie('refresh_token', session.refresh_token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: session.expires_in * 1000,
+        });
+    }
+
+    @Get('test-guards')
+    @UseGuards(SupabaseGuard)
+    async testGuards(@Req() req: Request) {
+        console.log('COOKIES', req.cookies);
+        console.log('Headers Cookie', req.headers.cookie);
+        console.log('Haciendo pruebas de cookies guardadas');
+        return 'Guards OK';
     }
 }
