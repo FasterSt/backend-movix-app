@@ -29,7 +29,12 @@ export class AuthService {
         return await this.supabaseService.signInWithGithub();
     }
 
+    async signInWithGoogle() {
+        return await this.supabaseService.signInWithGoogle();
+    }
+
     async handleAuthCallback(code: string) {
+        console.log('code', code);
         return await this.supabaseService.handleAuthCallback(code);
     }
 
@@ -37,7 +42,7 @@ export class AuthService {
         return await this.supabaseService.refreshToken(refresh_token);
     }
 
-    async getUser(jwt: string) {
-        return await this.supabaseService.getUser(jwt);
+    async getUser(userId: string) {
+        return await this.supabaseService.getUser(userId);
     }
 }

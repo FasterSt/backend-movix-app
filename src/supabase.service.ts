@@ -1,47 +1,54 @@
 import {
     ConflictException,
     GatewayTimeoutException,
+    Inject,
     Injectable,
     InternalServerErrorException,
     NotFoundException,
+    Req,
+    Res,
+    // Request,
+    // Response,
+    Scope,
     UnsupportedMediaTypeException,
 } from '@nestjs/common';
-import { createServerClient, parseCookieHeader } from '@supabase/ssr';
-import { SupabaseClient } from '@supabase/supabase-js';
-// import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { REQUEST } from '@nestjs/core';
+import {
+    createServerClient,
+    parseCookieHeader,
+    serializeCookieHeader,
+} from '@supabase/ssr';
+// import { SupabaseClient } from '@supabase/supabase-js';
+import { Request, Response } from 'express';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 @Injectable()
 export class SupabaseService {
     private supabaseClient: SupabaseClient;
+    // @Inject(REQUEST) private readonly req: Request
     constructor() {
-        // this.supabaseClient = createClient(
-        //     process.env.SUPABASE_URL_PROJECT,
-        //     process.env.SUPABASE_KEY,
-        // {
-        //     cookies: {
-        //         getAll() {
-        //             return parseCookieHeader();
-        //         },
-        //     },
-        // },
-        // {
-        //     auth: {
-        //         autoRefreshToken: true,
-        //         persistSession: true,
-        //     },
-        // },
-        // );
-        this.supabaseClient = createServerClient(
+        this.supabaseClient = createClient(
             process.env.SUPABASE_URL_PROJECT,
             process.env.SUPABASE_KEY,
             {
-                cookies: {
-                    getAll() {
-                        return parseCookieHeader('');
-                    },
+                auth: {
+                    detectSessionInUrl: true,
+                    flowType: 'pkce',
                 },
             },
         );
+        // this.supabaseClient = createServerClient(
+        //     process.env.SUPABASE_URL_PROJECT,
+        //     process.env.SUPABASE_KEY,
+        //     {
+        //         cookies: {
+        //             getAll() {
+        //                 return parseCookieHeader('');
+        //             },
+        //             setAll() {},
+        //         },
+        //     },
+        // );
     }
 
     getSupabaseClient() {
@@ -104,6 +111,21 @@ export class SupabaseService {
         return data;
     }
 
+    async signInWithGoogle() {
+        const { data, error } = await this.supabaseClient.auth.signInWithOAuth({
+            provider: 'google',
+            options: {
+                redirectTo: `${process.env.BACKEND_URL}/api/auth/google/callback`,
+            },
+        });
+
+        if (error) {
+            throw new UnsupportedMediaTypeException(error.message);
+        }
+
+        return data;
+    }
+
     async handleAuthCallback(code: string) {
         console.log('CODE', code);
         const { data, error } =
@@ -130,17 +152,18 @@ export class SupabaseService {
         return { message: 'Signed out successfully' };
     }
 
-    async getUser(jwt: string) {
-        const {
-            data: { user },
-            error,
-        } = await this.supabaseClient.auth.getUser(jwt);
+    async getUser(userId: string) {
+        const { error, data } = await this.supabaseClient
+            .from('users')
+            .select('*')
+            .eq('id', userId)
+            .single();
 
         if (error) {
             throw new NotFoundException(error.message);
         }
 
-        return user;
+        return data;
     }
 
     async refreshToken(refresh_token: string) {

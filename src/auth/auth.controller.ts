@@ -10,6 +10,7 @@ import {
     UnauthorizedException,
     InternalServerErrorException,
     UseGuards,
+    Redirect,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { CreateUserDto } from './dto/create-auth.dto';
@@ -35,12 +36,12 @@ export class AuthController {
         res.cookie('access_token', session.access_token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
+            sameSite: 'lax',
             maxAge: session.expires_in * 1000,
         }).cookie('refresh_token', session.refresh_token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
+            sameSite: 'lax',
             maxAge: session.expires_in * 1000,
         });
     }
@@ -60,12 +61,12 @@ export class AuthController {
         res.cookie('access_token', session.access_token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
+            sameSite: 'lax',
             maxAge: session.expires_in * 1000,
         }).cookie('refresh_token', session.refresh_token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
+            sameSite: 'lax',
             maxAge: session.expires_in * 1000,
         });
     }
@@ -103,21 +104,64 @@ export class AuthController {
         res.cookie('access_token', session.access_token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
+            sameSite: 'lax',
             maxAge: session.expires_in * 1000,
-        });
-
-        res.cookie('refresh_token', session.refresh_token, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
-            maxAge: session.expires_in * 1000,
-        });
-
-        res.redirect(`${process.env.FRONTEND_URL}`);
+        })
+            .cookie('refresh_token', session.refresh_token, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'lax',
+                maxAge: session.expires_in * 1000,
+            })
+            .redirect(`${process.env.FRONTEND_URL}`);
     }
 
-    @Post('refresh')
+    @Get('google')
+    async googleLogin() {
+        console.log('GOOGLE LOGIN');
+        return await this.authService.signInWithGoogle();
+    }
+
+    @Get('google/callback')
+    async googleCallback(
+        @Query('code') code: string,
+        @Res() res: Response,
+        @Req() req: Request,
+    ) {
+        console.log('CODE', code);
+
+        if (!code) {
+            throw new BadRequestException('No code provided');
+        }
+
+        // Delete this line and destructuring session of the token
+        const token = await this.authService.handleAuthCallback(code);
+
+        if (!token) {
+            throw new InternalServerErrorException('Error signing in user');
+        }
+
+        const { session } = token;
+
+        console.log(token);
+        console.log(req.originalUrl);
+
+        res.cookie('access_token', session.access_token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            maxAge: 60 * 1000,
+        })
+            .cookie('refresh_token', session.refresh_token, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'lax',
+                maxAge: (session.expires_in + session.expires_in) * 1000,
+            })
+            .redirect(`${process.env.FRONTEND_URL}`);
+    }
+
+    @Post('refresh-token')
     async refreshToken(
         @Body()
         {
@@ -136,21 +180,24 @@ export class AuthController {
         res.cookie('access_token', session.access_token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
-            maxAge: session.expires_in * 1000,
+            sameSite: 'lax',
+            maxAge: 60 * 1000,
         }).cookie('refresh_token', session.refresh_token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
-            maxAge: session.expires_in * 1000,
+            sameSite: 'lax',
+            maxAge: (session.expires_in + session.expires_in) * 1000,
         });
     }
 
-    @Get('test-guards')
+    // Delete this endpoint when finished of the guard test
+
     @UseGuards(SupabaseGuard)
+    @Get('test-guards')
     async testGuards(@Req() req: Request) {
         console.log('COOKIES', req.cookies);
-        console.log('Headers Cookie', req.headers.cookie);
+        console.log('Headers Cookie', req.headers.cookie, req.headers.cookies);
+        console.log('USER', req.user);
         console.log('Haciendo pruebas de cookies guardadas');
         return 'Guards OK';
     }
