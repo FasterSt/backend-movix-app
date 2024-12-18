@@ -22,8 +22,8 @@ export class MoviesService {
             ...data,
             results: data.results.map((movie) => ({
                 ...movie,
-                backdrop_path: `https://image.tmdb.org/t/p/original${movie.backdrop_path}`,
-                poster_path: `https://image.tmdb.org/t/p/original${movie.poster_path}`,
+                backdrop_path: `${process.env.TMDB_IMAGE_URL}${movie.backdrop_path}`,
+                poster_path: `${process.env.TMDB_IMAGE_URL}${movie.poster_path}`,
             })),
         };
 

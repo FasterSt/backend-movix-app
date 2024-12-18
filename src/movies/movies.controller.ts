@@ -1,8 +1,17 @@
-import { Controller, Get, Post, Body, Param } from '@nestjs/common';
+import {
+    Controller,
+    Get,
+    Post,
+    Body,
+    Param,
+    Res,
+    HttpCode,
+} from '@nestjs/common';
 import { MoviesService } from './movies.service';
 import { CreateMovieDto } from './dto/create-movie.dto';
 import { CinemaMovies } from './entities/cinemaMovies.entity';
 import { Movie } from './entities/movie.entity';
+import { Response } from 'express';
 
 @Controller('movies')
 export class MoviesController {
@@ -14,8 +23,12 @@ export class MoviesController {
     }
 
     @Get()
-    async getAllInCinemas(): Promise<CinemaMovies> {
-        return await this.moviesService.getAllInCinemas();
+    @HttpCode(200)
+    async getAllInCinemas(@Res() res: Response): Promise<void> {
+        const movies = await this.moviesService.getAllInCinemas();
+        res.json({
+            data: movies,
+        });
     }
 
     @Get(':id')
